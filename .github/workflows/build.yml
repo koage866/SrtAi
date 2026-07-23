@@ -14,12 +14,22 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Unzip Project & Build
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Unzip & Build APK
         run: |
           mkdir -p extracted
-          unzip -q *.zip -d extracted
-          cd extracted/*
-          gradle assembleDebug
+          unzip -o "*.zip" -d extracted
+          BUILD_DIR=$(find extracted -type f \( -name "build.gradle" -o -name "build.gradle.kts" \) | head -n 1 | xargs dirname)
+          echo "Found project directory: $BUILD_DIR"
+          cd "$BUILD_DIR"
+          if [ -f "./gradlew" ]; then
+            chmod +x gradlew
+            ./gradlew assembleDebug
+          else
+            gradle assembleDebug
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
