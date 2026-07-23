@@ -24,11 +24,16 @@ jobs:
           BUILD_DIR=$(find extracted -type f \( -name "build.gradle" -o -name "build.gradle.kts" \) | head -n 1 | xargs dirname)
           echo "Found project directory: $BUILD_DIR"
           cd "$BUILD_DIR"
+          
+          # Fix KSP IntelliJ issue in GitHub Actions CLI
+          echo "kotlin.compiler.execution.strategy=in-process" >> gradle.properties
+          echo "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8" >> gradle.properties
+
           if [ -f "./gradlew" ]; then
             chmod +x gradlew
-            ./gradlew assembleDebug
+            ./gradlew assembleDebug --no-daemon -Dkotlin.compiler.execution.strategy=in-process
           else
-            gradle assembleDebug
+            gradle assembleDebug --no-daemon -Dkotlin.compiler.execution.strategy=in-process
           fi
 
       - name: Upload APK
