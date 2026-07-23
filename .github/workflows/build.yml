@@ -21,7 +21,6 @@ jobs:
         run: |
           mkdir -p extracted
           
-          # Find and unzip ONLY the latest uploaded zip file
           LATEST_ZIP=$(ls -t *.zip 2>/dev/null | head -n 1)
           if [ -n "$LATEST_ZIP" ]; then
             echo "Unzipping latest file: $LATEST_ZIP"
@@ -35,12 +34,10 @@ jobs:
           echo "Found project directory: $BUILD_DIR"
           cd "$BUILD_DIR"
           
-          # Fix KSP AWT Headless & Daemon issues
           echo "kotlin.compiler.execution.strategy=in-process" >> gradle.properties
           echo "org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8 -Djava.awt.headless=true" >> gradle.properties
           echo "org.gradle.daemon=false" >> gradle.properties
 
-          # 1. Generate debug.keystore in all necessary paths
           mkdir -p ~/.android
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" || true
           cp debug.keystore ~/.android/debug.keystore || true
@@ -48,54 +45,7 @@ jobs:
             cp debug.keystore app/ || true
           fi
 
-          # 2. Universal Python script to match ALL package names
-          python3 -c '
-import os, re, json
-
-packages = set()
-
-for root, dirs, files in os.walk("."):
-    for f in files:
-        if f.endswith((".gradle", ".kts", ".xml", ".kt", ".java")):
-            path = os.path.join(root, f)
-            try:
-                content = open(path, errors="ignore").read()
-                matches = re.findall(r"(?:applicationId|namespace|package)\s*=?\s*[\"\']([^\"\']+)[\"\']", content)
-                for m in matches:
-                    if "." in m and not m.startswith("android.") and not m.startswith("androidx."):
-                        packages.add(m)
-                pkg_matches = re.findall(r"package\s+([a-zA-Z0-9_.]+)", content)
-                for m in pkg_matches:
-                    if "." in m and not m.startswith("android.") and not m.startswith("androidx."):
-                        packages.add(m)
-            except Exception:
-                pass
-
-if not packages:
-    packages.add("com.example.app")
-
-clients = []
-for idx, pkg in enumerate(packages):
-    clients.append({
-        "client_info": {
-            "mobilesdk_app_id": f"1:1234567890:android:1234567890{idx}",
-            "android_client_info": {"package_name": pkg}
-        },
-        "api_key": [{"current_key": "dummy_key"}]
-    })
-
-data = {
-    "project_info": {"project_number": "1234567890", "project_id": "dummy-project"},
-    "client": clients
-}
-
-for td in [".", "app", "app/src/main", "app/src/debug"]:
-    if os.path.exists(td):
-        with open(os.path.join(td, "google-services.json"), "w") as f:
-            json.dump(data, f, indent=2)
-
-print(f"Generated google-services.json for packages: {list(packages)}")
-'
+          python3 -c "import os, re, json; pkgs = set(); [pkgs.add(m) for root, _, files in os.walk('.') for f in files if f.endswith(('.gradle', '.kts', '.xml', '.kt', '.java')) for m in re.findall(r'(?:applicationId|namespace|package)\s*=?\s*[\'\"]([^\'\"]+)[\'\"]', open(os.path.join(root, f), errors='ignore').read()) if '.' in m and not m.startswith(('android.', 'androidx.'))]; pkgs = list(pkgs) or ['com.example.app']; data = {'project_info': {'project_number': '1234567890', 'project_id': 'dummy-project'}, 'client': [{'client_info': {'mobilesdk_app_id': f'1:1234567890:android:1234567890{i}', 'android_client_info': {'package_name': p}}, 'api_key': [{'current_key': 'dummy_key'}]} for i, p in enumerate(pkgs)]}; [open(os.path.join(d, 'google-services.json'), 'w').write(json.dumps(data, indent=2)) for d in ['.', 'app', 'app/src/main', 'app/src/debug'] if os.path.exists(d)]; print('Generated JSON for:', pkgs)"
 
           if [ -f "./gradlew" ]; then
             chmod +x gradlew
